@@ -14,7 +14,7 @@ void main()
         auto uport = openUTF8TextInputPort(file);
 
         foreach (line; uport.byLine)
-            ++nlines;
+            line.dup, ++nlines;
     }
     pc.stop;
 
@@ -224,8 +224,9 @@ version (Posix)
      */
     @property ulong size() const
     {
+        immutable orig = .lseek(context_.handle, 0, SEEK_CUR);
         immutable size = .lseek(context_.handle, 0, SEEK_END);
-        if (size == -1)
+        if (size == -1 || .lseek(context_.handle, orig, SEEK_SET) == -1)
         {
             switch (errno)
             {
@@ -246,128 +247,6 @@ private:
         int refCount = 1;
     }
     Context* context_;
-}
-
-
-//----------------------------------------------------------------------------//
-
-struct InputBuffer(Device)
-{
-    this(Device device, size_t bufferSize)
-    {
-        context_        = new Context;
-        context_.buffer = new ubyte[](bufferSize);
-        swap(device_, device);
-    }
-
-    void opAssign(typeof(this) rhs)
-    {
-        swap(this, rhs);
-    }
-
-
-    //----------------------------------------------------------------//
-
-    void fill()
-    {
-        with (*context_)
-        {
-            if (bufferStart == bufferEnd)
-                bufferStart = bufferEnd = 0;
-
-            if (bufferEnd < buffer.length)
-                bufferEnd += device_.read(buffer[bufferEnd .. $]);
-        }
-    }
-
-    ubyte[] data()
-    {
-        with (*context_)
-            return buffer[bufferStart .. bufferEnd];
-    }
-
-    void skip(size_t count)
-    {
-        context_.bufferStart += count;
-    }
-
-
-    //----------------------------------------------------------------//
-
-    @property ref Device device()
-    {
-        return device_;
-    }
-
-    static if (is(typeof(Device.seek) == function))
-    {
-        void seek(long step)
-        {
-            if (step == 0)
-                return;
-
-            with (*context_)
-            {
-                if (step < 0)
-                {
-                    if (bufferStart + step >= 0)
-                        bufferStart += step;
-                    else
-                        resetAt(position + step);
-                }
-                else
-                {
-                    if (bufferStart + step <= bufferEnd)
-                        bufferStart += step;
-                    else
-                        resetAt(position + step);
-                }
-            }
-        }
-
-        private void resetAt(long pos)
-        {
-            device_.seek(pos);
-            context_.bufferStart = 0;
-            context_.bufferEnd   = 0;
-            fill();
-        }
-
-        @property ulong position()
-        {
-            return device_.position - data.length;
-        }
-    }
-
-
-    //----------------------------------------------------------------//
-private:
-    struct Context
-    {
-        ubyte[] buffer;
-        size_t  bufferStart;
-        size_t  bufferEnd;
-    }
-    Device   device_;
-    Context* context_;
-}
-
-unittest
-{
-    static struct ZeroDevice
-    {
-        size_t read(ubyte[] buffer)
-        {
-            buffer[] = 0;
-            return buffer.length;
-        }
-    }
-    ZeroDevice device;
-
-    auto buffer = InputBuffer!ZeroDevice(device, 512);
-    buffer.fill();
-    buffer.skip(128);
-    assert(buffer.buffer.length == 512 - 128);
 }
 
 
