@@ -18,7 +18,7 @@ void main()
     }
     pc.stop;
 
-    printf("%g line/sec\n", 100_000.0*nlines / pc.microseconds);
+    printf("%g line/sec\n", nlines / (1.e-6 * pc.microseconds));
 }
 
 
